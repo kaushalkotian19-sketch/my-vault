@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Personal Vault</title>
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-card: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --danger: #ef4444;
+      --radius: 12px;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    body { background-color: var(--bg-main); color: var(--text-main); min-height: 100vh; padding: 20px; }
+    
+    .container { max-width: 1200px; margin: 0 auto; }
+    
+    /* Config / Login Screen */
+    #configScreen {
+      max-width: 400px; margin: 100px auto; background: var(--bg-card);
+      padding: 30px; border-radius: var(--radius); box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    #configScreen h2 { margin-bottom: 20px; text-align: center; }
+    
+    input {
+      width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #334155;
+      background: #0f172a; color: white; border-radius: 8px; outline: none;
+    }
+    input:focus { border-color: var(--accent); }
+    
+    button {
+      width: 100%; padding: 12px; border: none; background: var(--accent);
+      color: white; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s;
+    }
+    button:hover { background: var(--accent-hover); }
+    
+    /* Dashboard Screen */
+    #appScreen { display: none; }
+    
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
+    header h1 { font-size: 24px; }
+    
+    .search-bar { flex: 1; min-width: 250px; max-width: 500px; position: relative; }
+    .search-bar input { margin: 0; border-radius: 20px; padding-left: 20px; }
+    
+    /* Upload Panel */
+    .upload-panel {
+      background: var(--bg-card); padding: 20px; border-radius: var(--radius);
+      margin-bottom: 30px; border: 1px dashed #334155;
+    }
+    .upload-panel h3 { margin-bottom: 15px; }
+    .upload-form-group { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
+    .upload-form-group input { flex: 1; margin: 0; min-width: 150px; }
+    
+    /* File Grid (Masonry feel) */
+    .file-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 20px; align-items: start;
+    }
+    
+    .file-card {
+      background: var(--bg-card); border-radius: var(--radius); overflow: hidden;
+      transition: transform 0.2s; position: relative; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    .file-card:hover { transform: translateY(-5px); }
+    
+    .file-preview { height: 160px; background: #0b1120; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    .file-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .file-preview .pdf-icon { font-size: 48px; color: var(--danger); }
+    
+    .file-info { padding: 15px; }
+    .file-title { font-weight: bold; margin-bottom: 5px; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-tags { font-size: 12px; color: var(--accent); margin-bottom: 10px; }
+    .file-date { font-size: 11px; color: var(--text-muted); margin-bottom: 15px; }
+    
+    .file-actions { display: flex; gap: 10px; }
+    .btn-download { flex: 1; background: #22c55e; padding: 8px; }
+    .btn-download:hover { background: #16a34a; }
+    .btn-delete { background: var(--danger); padding: 8px; width: auto; }
+    .btn-delete:hover { background: #b91c1c; }
+
+    /* Loading Overlay */
+    #loader {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 23, 42, 0.9); z-index: 1000; justify-content: center; align-items: center;
+      flex-direction: column; color: white;
+    }
+    .spinner { border: 4px solid #334155; border-top: 4px solid var(--accent); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div id="loaderText">Processing...</div>
+  </div>
+
+  <div class="container">
+    <!-- Config / Login Screen -->
+    <div id="configScreen">
+      <h2>Vault Setup</h2>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 15px;">Credentials are stored locally in your browser.</p>
+      <input type="text" id="confUser" placeholder="GitHub Username">
+      <input type="text" id="confRepo" placeholder="Repository Name (e.g., my-vault)">
+      <input type="password" id="confToken" placeholder="GitHub PAT Token">
+      <button onclick="saveConfig()">Save & Enter Vault</button>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="appScreen">
+      <header>
+        <h1>My Private Vault</h1>
+        <div class="search-bar">
+          <input type="text" id="searchInput" placeholder="Search by name, tags, or date..." onkeyup="renderGrid()">
+        </div>
+        <button onclick="logout()" style="width: auto; padding: 10px 20px; background: #334155;">Logout</button>
+      </header>
+
+      <div class="upload-panel">
+        <h3>Secure Upload</h3>
+        <input type="file" id="fileInput" accept="image/*, application/pdf" style="margin-bottom: 15px;">
+        <div class="upload-form-group">
+          <input type="text" id="fileTitle" placeholder="Custom File Name (Optional)">
+          <input type="text" id="fileTags" placeholder="Tags (e.g., IGNOU, NovaForge, Receipts)">
+        </div>
+        <button onclick="handleUpload()">Encrypt & Upload to GitHub</button>
+      </div>
+
+      <div class="file-grid" id="fileGrid">
+        <!-- Cards generated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global State
+    let config = { user: '', repo: '', token: '' };
+    let metadata = [];
+    let metadataSha = null;
+
+    // --- INITIALIZATION ---
+    window.onload = () => {
+      const savedConfig = localStorage.getItem('gh_vault_config');
+      if (savedConfig) {
+        config = JSON.parse(savedConfig);
+        document.getElementById('configScreen').style.display = 'none';
+        document.getElementById('appScreen').style.display = 'block';
+        fetchMetadata();
+      }
+    };
+
+    function saveConfig() {
+      config.user = document.getElementById('confUser').value.trim();
+      config.repo = document.getElementById('confRepo').value.trim();
+      config.token = document.getElementById('confToken').value.trim();
+      
+      if(!config.user || !config.repo || !config.token) return alert('Fill all fields!');
+      
+      localStorage.setItem('gh_vault_config', JSON.stringify(config));
+      document.getElementById('configScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      fetchMetadata();
+    }
+
+    function logout() {
+      localStorage.removeItem('gh_vault_config');
+      location.reload();
+    }
+
+    function showLoader(msg) {
+      document.getElementById('loaderText').innerText = msg;
+      document.getElementById('loader').style.display = 'flex';
+    }
+    function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+
+    // --- GITHUB API HELPERS ---
+    async function ghFetch(endpoint, method = 'GET', body = null) {
+      const url = `https://api.github.com/repos/${config.user}/${config.repo}/contents/${endpoint}`;
+      const options = {
+        method,
+        headers: {
+          'Authorization': `Bearer ${config.token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        }
+      };
+      if (body) options.body = JSON.stringify(body);
+      
+      const res = await fetch(url, options);
+      if(!res.ok && res.status !== 404) throw new Error(await res.text());
+      return res.status === 404 ? null : await res.json();
+    }
+
+    // --- METADATA MANAGEMENT ---
+    async function fetchMetadata() {
+      showLoader('Loading Vault Index...');
+      try {
+        const data = await ghFetch('metadata.json');
+        if (data) {
+          metadata = JSON.parse(atob(data.content));
+          metadataSha = data.sha;
+        } else {
+          // If metadata doesn't exist, start fresh
+          metadata = [];
+          metadataSha = null;
+        }
+        renderGrid();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to load. Check console or credentials.');
+      }
+      hideLoader();
+    }
+
+    async function updateMetadata() {
+      const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(metadata, null, 2))));
+      const body = {
+        message: "Update vault metadata",
+        content: contentBase64
+      };
+      if (metadataSha) body.sha = metadataSha;
+      
+      const res = await ghFetch('metadata.json', 'PUT', body);
+      metadataSha = res.content.sha;
+    }
+
+    // --- UPLOAD LOGIC ---
+    async function handleUpload() {
+      const fileInput = document.getElementById('fileInput');
+      if (!fileInput.files[0]) return alert("Select a file first.");
+      
+      const file = fileInput.files[0];
+      const customTitle = document.getElementById('fileTitle').value.trim() || file.name;
+      const tagsInput = document.getElementById('fileTags').value;
+      const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : [];
+      
+      const ext = file.name.split('.').pop().toLowerCase();
+      const isPdf = ext === 'pdf';
+      const folder = isPdf ? 'pdfs' : 'images';
+      // Create unique path based on timestamp
+      const safeName = `${Date.now()}_${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const filePath = `${folder}/${safeName}`;
+
+      showLoader('Encrypting & Uploading...');
+
+      const reader = new FileReader();
+      reader.onload = async function() {
+        try {
+          const base64Content = reader.result.split(',')[1];
+          
+          // 1. Upload File
+          await ghFetch(filePath, 'PUT', {
+            message: `Upload ${customTitle}`,
+            content: base64Content
+          });
+
+          // 2. Add to Metadata
+          const newEntry = {
+            id: Date.now().toString(),
+            title: customTitle,
+            type: isPdf ? 'pdf' : 'image',
+            path: filePath,
+            tags: tags,
+            date: new Date().toISOString().split('T')[0]
+          };
+          metadata.unshift(newEntry);
+          
+          // 3. Save Metadata
+          await updateMetadata();
+          
+          // Reset UI
+          fileInput.value = '';
+          document.getElementById('fileTitle').value = '';
+          document.getElementById('fileTags').value = '';
+          renderGrid();
+          
+        } catch (err) {
+          console.error(err);
+          alert('Upload failed: ' + err.message);
+        }
+        hideLoader();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // --- DELETE LOGIC ---
+    async function deleteFile(id) {
+      if(!confirm("Are you sure you want to permanently delete this file from GitHub?")) return;
+      
+      showLoader('Deleting file...');
+      try {
+        const itemIndex = metadata.findIndex(m => m.id === id);
+        const item = metadata[itemIndex];
+
+        // 1. Get file SHA to delete it
+        const fileData = await ghFetch(item.path);
+        
+        // 2. Delete file
+        await ghFetch(item.path, 'DELETE', {
+          message: `Delete ${item.title}`,
+          sha: fileData.sha
+        });
+
+        // 3. Remove from metadata & update
+        metadata.splice(itemIndex, 1);
+        await updateMetadata();
+        
+        renderGrid();
+      } catch (err) {
+        console.error(err);
+        alert('Delete failed: ' + err.message);
+      }
+      hideLoader();
+    }
+
+    // --- DOWNLOAD LOGIC ---
+    async function downloadFile(path, title) {
+      showLoader('Fetching secure file...');
+      try {
+        // Fetch raw content through API to use the token (bypasses private repo restrictions)
+        const res = await fetch(`https://api.github.com/repos/${config.user}/${config.repo}/contents/${path}`, {
+          headers: {
+            'Authorization': `Bearer ${config.token}`,
+            'Accept': 'application/vnd.github.v3.raw'
+          }
+        });
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = title;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error(err);
+        alert("Download failed.");
+      }
+      hideLoader();
+    }
+
+    // --- UI RENDERING ---
+    function renderGrid() {
+      const grid = document.getElementById('fileGrid');
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      grid.innerHTML = '';
+
+      const filtered = metadata.filter(m => 
+        m.title.toLowerCase().includes(search) || 
+        m.tags.some(t => t.toLowerCase().includes(search)) ||
+        m.date.includes(search)
+      );
+
+      filtered.forEach(item => {
+        const isImg = item.type === 'image';
+        // We use GitHub's raw URL format but append a dummy parameter to force token usage via JS if we wanted to display it directly. 
+        // For private repos, images won't load natively in <img> tags without token proxying. 
+        // Simple workaround for this demo: show an icon, user must click to view/download securely.
+        
+        const previewHtml = isImg 
+          ? `<div class="pdf-icon">🖼️</div>` 
+          : `<div class="pdf-icon">📄</div>`;
+
+        const card = document.createElement('div');
+        card.className = 'file-card';
+        card.innerHTML = `
+          <div class="file-preview">
+            ${previewHtml}
+          </div>
+          <div class="file-info">
+            <div class="file-title" title="${item.title}">${item.title}</div>
+            <div class="file-tags">${item.tags.length ? '#' + item.tags.join(' #') : ''}</div>
+            <div class="file-date">${item.date}</div>
+            <div class="file-actions">
+              <button class="btn-download" onclick="downloadFile('${item.path}', '${item.title}')">Download</button>
+              <button class="btn-delete" onclick="deleteFile('${item.id}')">🗑️</button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      
+      if(filtered.length === 0) {
+        grid.innerHTML = `<p style="color:var(--text-muted); grid-column: 1/-1;">No files found.</p>`;
+      }
+    }
+  </script>
+</body>
+</html>
